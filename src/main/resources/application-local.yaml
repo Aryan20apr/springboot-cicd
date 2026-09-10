@@ -1,0 +1,12 @@
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    '[com.example.cicddemo]': DEBUG
+
+management:
+  endpoint:
+    health:
+      show-details: always

@@ -8,7 +8,7 @@ import java.time.Instant;
 import java.util.Map;
 
 @RestController
-public class HelloController {
+public class DemoController {
 
     @Value("${spring.profiles.active:default}")
     private String activeProfile;

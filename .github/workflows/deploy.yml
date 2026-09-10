@@ -53,7 +53,7 @@ jobs:
           tags: tag:ci
 
       - name: Verify connectivity
-        run: tailscale ping ${{ secrets.VM_HOSTNAME }}
+        run: tailscale ping --until-direct=false ${{ secrets.VM_HOSTNAME }}
 
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1

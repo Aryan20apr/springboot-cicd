@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/Aryan20apr/springboot-cicd:latest
+    image: ghcr.io/aryan20apr/springboot-cicd:latest
     container_name: springboot-app
     restart: unless-stopped
     expose:

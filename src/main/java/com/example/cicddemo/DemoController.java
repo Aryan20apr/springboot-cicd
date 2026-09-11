@@ -13,7 +13,7 @@ public class DemoController {
     @Value("${spring.profiles.active:default}")
     private String activeProfile;
 
-    @GetMapping("/api/hello")
+    @GetMapping("/api/health")
     public Map<String, Object> hello() {
         return Map.of(
                 "message", "Hello from Spring Boot!",

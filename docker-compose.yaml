@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/<your-github-username>/<your-repo-name>:latest
+    image: ghcr.io/aryan20apr/springboot-cicd:latest
     container_name: springboot-app
     restart: unless-stopped
     expose:

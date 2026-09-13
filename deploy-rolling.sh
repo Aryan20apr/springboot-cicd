@@ -27,6 +27,13 @@ wait_for_health() {
 
 export IMAGE_TAG=$IMAGE_TAG
 
+# Cold start check: ensure postgres is up and healthy
+if ! docker ps --format '{{.Names}}' | grep -q "^postgres-db$"; then
+    echo "=== Starting PostgreSQL database ==="
+    docker compose up -d postgres
+    wait_for_health "postgres-db" 60
+fi
+
 # Cold start check: if either app-1 or app-2 is not running, bootstrap both first
 if ! docker ps --format '{{.Names}}' | grep -q "^app-1$" || ! docker ps --format '{{.Names}}' | grep -q "^app-2$"; then
     echo "=== Cold Start: Bootstrapping both replicas (app-1 and app-2) with $IMAGE_TAG ==="

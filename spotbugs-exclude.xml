@@ -1,0 +1,10 @@
+<FindBugsFilter>
+    <!-- Exclude test classes from SpotBugs analysis -->
+    <Match>
+        <Class name="~.*Test.*"/>
+    </Match>
+    <!-- Suppress EI_EXPOSE_REP and EI_EXPOSE_REP2 for Spring DI beans and entities -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+</FindBugsFilter>

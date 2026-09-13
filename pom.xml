@@ -75,6 +75,106 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
+
+			<!-- ── Checkstyle: enforces code style (Google Java Style) ── -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-checkstyle-plugin</artifactId>
+				<version>3.6.0</version>
+				<configuration>
+					<!-- google_checks.xml is bundled inside the plugin jar — no file to create -->
+					<configLocation>google_checks.xml</configLocation>
+					<suppressionsLocation>checkstyle-suppressions.xml</suppressionsLocation>
+					<!-- Treat any violation as a build failure, not just a warning -->
+					<violationSeverity>warning</violationSeverity>
+					<failOnViolation>true</failOnViolation>
+					<!-- Include test sources in the check -->
+					<includeTestSourceDirectory>true</includeTestSourceDirectory>
+				</configuration>
+			</plugin>
+
+			<!-- ── SpotBugs: static bytecode analysis ── -->
+			<plugin>
+				<groupId>com.github.spotbugs</groupId>
+				<artifactId>spotbugs-maven-plugin</artifactId>
+				<version>4.9.3.0</version>
+				<configuration>
+					<!-- Max effort = most thorough analysis. Slower but catches more. -->
+					<effort>Max</effort>
+					<!-- Fail on Medium-and-above severity findings -->
+					<threshold>Medium</threshold>
+					<failOnError>true</failOnError>
+					<excludeFilterFile>spotbugs-exclude.xml</excludeFilterFile>
+				</configuration>
+				<dependencies>
+					<dependency>
+						<groupId>org.ow2.asm</groupId>
+						<artifactId>asm</artifactId>
+						<version>9.10.1</version>
+					</dependency>
+					<dependency>
+						<groupId>org.ow2.asm</groupId>
+						<artifactId>asm-analysis</artifactId>
+						<version>9.10.1</version>
+					</dependency>
+					<dependency>
+						<groupId>org.ow2.asm</groupId>
+						<artifactId>asm-commons</artifactId>
+						<version>9.10.1</version>
+					</dependency>
+					<dependency>
+						<groupId>org.ow2.asm</groupId>
+						<artifactId>asm-tree</artifactId>
+						<version>9.10.1</version>
+					</dependency>
+					<dependency>
+						<groupId>org.ow2.asm</groupId>
+						<artifactId>asm-util</artifactId>
+						<version>9.10.1</version>
+					</dependency>
+				</dependencies>
+			</plugin>
+
+			<!-- ── JaCoCo: code coverage measurement and enforcement ── -->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.13</version>
+				<executions>
+					<!-- prepare-agent must run before tests to instrument classes -->
+					<execution>
+						<id>prepare-agent</id>
+						<goals><goal>prepare-agent</goal></goals>
+					</execution>
+					<!-- check runs during verify phase, after tests -->
+					<execution>
+						<id>check</id>
+						<phase>verify</phase>
+						<goals><goal>check</goal></goals>
+						<configuration>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<limits>
+										<limit>
+											<counter>LINE</counter>
+											<value>COVEREDRATIO</value>
+											<!-- 60% floor — ratchet up in later phases -->
+											<minimum>0.60</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
+						</configuration>
+					</execution>
+					<!-- report generates HTML/XML output for the pipeline artifact upload -->
+					<execution>
+						<id>report</id>
+						<phase>verify</phase>
+						<goals><goal>report</goal></goals>
+					</execution>
+				</executions>
+			</plugin>
 		</plugins>
 	</build>
 

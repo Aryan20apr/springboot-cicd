@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+    "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+    "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+<suppressions>
+    <!-- Suppress missing Javadoc on methods — not enforced in this codebase yet -->
+    <suppress checks="MissingJavadocMethod" files=".*\.java"/>
+    <!-- Suppress missing Javadoc on types — not enforced yet -->
+    <suppress checks="MissingJavadocType" files=".*\.java"/>
+    <!-- Suppress line length — existing code has lines > 100 chars -->
+    <suppress checks="LineLength" files=".*\.java"/>
+    <!-- Suppress indentation — existing codebase uses 4 spaces / tabs instead of Google 2 spaces -->
+    <suppress checks="Indentation" files=".*\.java"/>
+    <!-- Suppress custom import order -->
+    <suppress checks="CustomImportOrder" files=".*\.java"/>
+    <!-- Suppress tab characters -->
+    <suppress checks="FileTabCharacter" files=".*\.java"/>
+    <!-- Suppress need braces -->
+    <suppress checks="NeedBraces" files=".*\.java"/>
+</suppressions>

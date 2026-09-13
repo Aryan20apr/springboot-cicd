@@ -16,9 +16,8 @@ public class DemoController {
     @GetMapping("/api/health")
     public Map<String, Object> hello() {
         return Map.of(
-                "message", "Hello from Spring Boot!",
+                "message", "Good morning from Spring Boot!",
                 "profile", activeProfile,
-                "timestamp", Instant.now().toString()
-        );
+                "timestamp", Instant.now().toString());
     }
 }

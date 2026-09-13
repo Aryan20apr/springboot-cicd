@@ -2,7 +2,7 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [master]
+    branches: [master, feat/rolling-deployment]
   workflow_dispatch:
 
 jobs:
@@ -63,9 +63,9 @@ jobs:
           echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key ${{ secrets.VM_USER }}@${{ secrets.VM_HOSTNAME }} "mkdir -p /opt/springboot-app"
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key docker-compose.yaml nginx.conf deploy-canary.sh ${{ secrets.VM_USER }}@${{ secrets.VM_HOSTNAME }}:/opt/springboot-app/
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key docker-compose.yaml nginx.conf deploy-rolling.sh ${{ secrets.VM_USER }}@${{ secrets.VM_HOSTNAME }}:/opt/springboot-app/
 
-      - name: Deploy Canary (10% Traffic)
+      - name: Execute Rolling Deployment
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VM_HOSTNAME }}
@@ -73,31 +73,5 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             cd /opt/springboot-app
-            chmod +x deploy-canary.sh
-            ./deploy-canary.sh start ${{ github.sha }} 10%
-
-      - name: Canary Bake and Verification Period
-        run: |
-          echo "Observing canary health and stability for 30 seconds..."
-          sleep 30
-
-      - name: Promote Canary to 100% Stable
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VM_HOSTNAME }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          script: |
-            cd /opt/springboot-app
-            ./deploy-canary.sh promote ${{ github.sha }}
-
-      - name: Rollback Canary on Failure
-        if: failure()
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VM_HOSTNAME }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          script: |
-            cd /opt/springboot-app
-            ./deploy-canary.sh rollback || true
+            chmod +x deploy-rolling.sh
+            ./deploy-rolling.sh ${{ github.sha }}

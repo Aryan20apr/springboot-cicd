@@ -57,6 +57,21 @@ jobs:
       - name: Verify connectivity
         run: tailscale ping --until-direct=false ${{ secrets.VM_HOSTNAME }}
 
+      - name: Configure database secrets on VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VM_HOSTNAME }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            mkdir -p /opt/springboot-app
+            cat << 'EOF' > /opt/springboot-app/.env
+            DB_NAME=${{ secrets.DB_NAME || 'cicddb' }}
+            DB_USER=${{ secrets.DB_USER || 'postgres' }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            EOF
+            chmod 600 /opt/springboot-app/.env
+
       - name: Copy infra files to VM
         run: |
           mkdir -p ~/.ssh

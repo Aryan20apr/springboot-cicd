@@ -1,16 +1,29 @@
 services:
-  app:
-    image: ghcr.io/aryan20apr/springboot-cicd:latest
-    container_name: springboot-app
+  app-blue:
+    image: ghcr.io/aryan20apr/springboot-cicd:${BLUE_IMAGE_TAG:-latest}
+    container_name: app-blue
     restart: unless-stopped
-    expose:
-      - "8080"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    networks:
+      - app-net
+
+  app-green:
+    image: ghcr.io/aryan20apr/springboot-cicd:${GREEN_IMAGE_TAG:-latest}
+    container_name: app-green
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    networks:
+      - app-net
 
   nginx:
     image: nginx:alpine
@@ -19,7 +32,11 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      app:
-        condition: service_healthy
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./upstream.conf:/etc/nginx/conf.d/upstream.conf
+    networks:
+      - app-net
+
+networks:
+  app-net:
+    driver: bridge

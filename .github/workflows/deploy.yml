@@ -62,7 +62,7 @@ jobs:
           echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key ${{ secrets.VM_USER }}@${{ secrets.VM_HOSTNAME }} "mkdir -p /opt/springboot-app"
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key docker-compose.yaml nginx.conf ${{ secrets.VM_USER }}@${{ secrets.VM_HOSTNAME }}:/opt/springboot-app/
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key docker-compose.yaml nginx.conf deploy-blue-green.sh ${{ secrets.VM_USER }}@${{ secrets.VM_HOSTNAME }}:/opt/springboot-app/
 
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1
@@ -71,13 +71,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            set -e
-            echo "Running as: $(whoami)"
-            echo "Home dir: $HOME"
             cd /opt/springboot-app
-            pwd
-            ls -la
-            docker compose pull
-            docker compose up -d
-            docker image prune -f
-            docker compose ps -a
+            chmod +x deploy-blue-green.sh
+            # Pass the unique Git SHA to the deployment script
+            ./deploy-blue-green.sh ${{ github.sha }}

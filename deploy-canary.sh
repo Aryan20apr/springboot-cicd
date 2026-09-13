@@ -54,11 +54,23 @@ case "$ACTION" in
             usage
         fi
 
+        # Check if app-stable is running. If not, bootstrap app-stable first
+        if ! docker ps --format '{{.Names}}' | grep -q "^app-stable$"; then
+            echo "=== Cold Start: app-stable is not running. Bootstrapping app-stable first ==="
+            export STABLE_TAG=$IMAGE_TAG
+            docker compose pull app-stable
+            docker compose up -d --remove-orphans app-stable
+            wait_for_health "app-stable" 60
+            docker compose up -d nginx
+            docker exec nginx-proxy nginx -s reload || true
+            echo "Baseline app-stable is healthy and taking 100% traffic."
+        fi
+
         echo "=== Starting Canary Deployment ($PERCENTAGE traffic to $IMAGE_TAG) ==="
         export CANARY_TAG=$IMAGE_TAG
 
         docker compose pull app-canary
-        docker compose up -d app-canary
+        docker compose up -d --remove-orphans app-canary
 
         if wait_for_health "app-canary" 60; then
             echo "Applying traffic split: $PERCENTAGE -> canary, remaining -> stable"
@@ -93,7 +105,7 @@ EOF
         export STABLE_TAG=$IMAGE_TAG
 
         docker compose pull app-stable
-        docker compose up -d app-stable
+        docker compose up -d --remove-orphans app-stable
 
         if wait_for_health "app-stable" 60; then
             echo "App stable is healthy. Reverting traffic to 100% stable."
@@ -107,7 +119,7 @@ split_clients "${remote_addr}AAA" $upstream_variant {
 }
 EOF
             docker compose up -d nginx
-            docker exec nginx-proxy nginx -s reload
+            docker exec nginx-proxy nginx -s reload || true
 
             echo "Stopping canary container..."
             docker compose stop app-canary
@@ -120,6 +132,10 @@ EOF
 
     rollback)
         echo "=== Rolling back Canary Deployment ==="
+        # Stop canary container first so it is guaranteed to be shut down
+        echo "Stopping app-canary..."
+        docker compose stop app-canary 2>/dev/null || true
+
         cat << 'EOF' > canary.conf
 upstream canary_backend {
     server app-stable:8080;
@@ -130,8 +146,7 @@ split_clients "${remote_addr}AAA" $upstream_variant {
 }
 EOF
         docker compose up -d nginx
-        docker exec nginx-proxy nginx -s reload
-        docker compose stop app-canary
+        docker exec nginx-proxy nginx -s reload || true
         echo "Canary rolled back. 100% traffic on stable."
         ;;
 

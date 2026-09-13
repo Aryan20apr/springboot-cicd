@@ -1,7 +1,7 @@
 services:
-  app-stable:
-    image: ghcr.io/aryan20apr/springboot-cicd:${STABLE_TAG:-latest}
-    container_name: app-stable
+  app-1:
+    image: ghcr.io/aryan20apr/springboot-cicd:${IMAGE_TAG:-latest}
+    container_name: app-1
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health"]
@@ -12,9 +12,9 @@ services:
     networks:
       - app-net
 
-  app-canary:
-    image: ghcr.io/aryan20apr/springboot-cicd:${CANARY_TAG:-latest}
-    container_name: app-canary
+  app-2:
+    image: ghcr.io/aryan20apr/springboot-cicd:${IMAGE_TAG:-latest}
+    container_name: app-2
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health"]
@@ -33,7 +33,6 @@ services:
       - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./canary.conf:/etc/nginx/conf.d/canary.conf
     networks:
       - app-net
 

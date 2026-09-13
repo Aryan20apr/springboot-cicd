@@ -2,7 +2,7 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [master, feat/rolling-deployment]
+    branches: [master]
   workflow_dispatch:
 
 jobs:

@@ -104,6 +104,16 @@ class UserServiceTest {
     }
 
     @Test
+    void updateUser_whenNotFound_throwsUserNotFoundException() {
+        UserUpdateRequest request = new UserUpdateRequest("Jane Updated", "jane.updated@example.com");
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.updateUser(99L, request))
+                .isInstanceOf(UserNotFoundException.class)
+                .hasMessageContaining("99");
+    }
+
+    @Test
     void updateUser_whenEmailDuplicate_throwsEmailAlreadyExistsException() {
         UserUpdateRequest request = new UserUpdateRequest("Jane Updated", "other@example.com");
         when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser));

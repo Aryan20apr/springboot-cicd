@@ -278,8 +278,12 @@ jobs:
 
   # ─────────────────────────────────────────────────────────────
   # JOB 4: docker-push
-  # Builds the Docker image using the multi-stage Dockerfile.
-  # Uses GHA cache for Docker layers.
+  # Downloads the pre-built JAR from the 'build' job artifact.
+  # Builds a lean runtime image (JRE only) by copying the JAR in —
+  # no Maven inside Docker. This means:
+  #   - git.properties with full commit SHA is embedded in the JAR
+  #   - The tested artifact = the deployed artifact (same bytes)
+  #   - Docker builds are fast (no dependency download layer)
   # Tags with SHA only — no :latest (immutable artifact tagging).
   # OCI labels embed git SHA + build timestamp for traceability.
   # Trivy scan is currently disabled (see inline comment).
@@ -296,6 +300,16 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+
+      # Download the JAR produced by the 'build' job into target/.
+      # The Dockerfile does a plain COPY target/*.jar — no Maven inside Docker.
+      # This guarantees the same JAR that was tested is the one deployed,
+      # and git.properties (with full commit SHA) is already embedded in it.
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: target/
 
       - name: Set lowercase image name
         run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"

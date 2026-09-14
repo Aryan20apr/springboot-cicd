@@ -122,6 +122,13 @@
 					<threshold>Medium</threshold>
 					<failOnError>true</failOnError>
 					<excludeFilterFile>spotbugs-exclude.xml</excludeFilterFile>
+					<plugins>
+						<plugin>
+							<groupId>com.h3xstream.findsecbugs</groupId>
+							<artifactId>findsecbugs-plugin</artifactId>
+							<version>1.13.0</version>
+						</plugin>
+					</plugins>
 				</configuration>
 				<dependencies>
 					<dependency>
@@ -150,6 +157,16 @@
 						<version>9.10.1</version>
 					</dependency>
 				</dependencies>
+			</plugin>
+
+			<!-- ── OWASP Dependency-Check ── -->
+			<plugin>
+				<groupId>org.owasp</groupId>
+				<artifactId>dependency-check-maven</artifactId>
+				<version>10.0.3</version>
+				<configuration>
+					<failBuildOnCVSS>7</failBuildOnCVSS>
+				</configuration>
 			</plugin>
 
 			<!-- ── JaCoCo: code coverage measurement and enforcement ── -->

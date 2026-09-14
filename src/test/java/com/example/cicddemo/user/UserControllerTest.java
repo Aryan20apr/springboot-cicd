@@ -7,6 +7,7 @@ import com.example.cicddemo.user.exception.EmailAlreadyExistsException;
 import com.example.cicddemo.user.exception.UserNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.junit.jupiter.api.Tag;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -29,6 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(UserController.class)
+@Tag("unit")
 class UserControllerTest {
 
         @Autowired

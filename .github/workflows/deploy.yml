@@ -237,14 +237,7 @@ jobs:
           restore-keys: |
             maven-
 
-      - name: Restore NVD database cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.dependency-check
-          key: nvd-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            nvd-${{ runner.os }}-
-            nvd-
+      # NVD cache removed — OWASP Dependency-Check is disabled (see note below).
 
       - name: Download JAR artifact
         uses: actions/download-artifact@v4
@@ -256,26 +249,34 @@ jobs:
       - name: FindSecBugs (SAST)
         run: ./mvnw compile spotbugs:check -DskipTests -B
 
-      - name: OWASP Dependency-Check
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-        run: ./mvnw dependency-check:check -B -DnvdApiKey="${{ secrets.NVD_API_KEY }}"
-
-      - name: Upload OWASP HTML report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: owasp-report
-          path: target/dependency-check-report.html
-          retention-days: 7
+      # ── OWASP Dependency-Check: DISABLED ──
+      # The NVD API download is extremely slow (~10+ min) even with an API key;
+      # GitHub Actions cache doesn't help on the first run per cache key (no
+      # pre-seeded DB to restore from). Trivy (docker-push job) already scans
+      # the final container image for CVEs in OS packages and app libraries,
+      # providing equivalent coverage with sub-minute execution time.
+      # To re-enable: add back the NVD cache step above and uncomment below.
+      #
+      # - name: OWASP Dependency-Check
+      #   env:
+      #     NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+      #   run: ./mvnw dependency-check:check -B -DnvdApiKey="${{ secrets.NVD_API_KEY }}"
+      #
+      # - name: Upload OWASP HTML report
+      #   uses: actions/upload-artifact@v4
+      #   if: always()
+      #   with:
+      #     name: owasp-report
+      #     path: target/dependency-check-report.html
+      #     retention-days: 7
 
   # ─────────────────────────────────────────────────────────────
   # JOB 4: docker-push
-  # Builds the Docker image (the Dockerfile compiles the JAR
-  # internally using its own multi-stage build).
-  # Uses GHA cache for Docker layers — the expensive dependency
-  # download layer is cached across runs.
-  # Pushes to GHCR tagged with :latest and :<git-sha>.
+  # Builds the Docker image using the multi-stage Dockerfile.
+  # Uses GHA cache for Docker layers.
+  # Tags with SHA only — no :latest (immutable artifact tagging).
+  # OCI labels embed git SHA + build timestamp for traceability.
+  # Trivy scans the image for CVEs before push.
   # ─────────────────────────────────────────────────────────────
   docker-push:
     name: Docker Push
@@ -284,7 +285,7 @@ jobs:
     permissions:
       contents: read
       packages: write # Required to push to GHCR
-    needs: [test, quality, security, secret-scan] # Only build the image if all tests and security gates pass
+    needs: [test, quality, security, secret-scan]
 
     steps:
       - name: Checkout source code
@@ -303,17 +304,36 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build with load: true so Trivy can scan it before pushing
+      # Generate OCI-compliant labels. metadata-action centralises image metadata
+      # so labels are consistent whether built locally or in CI.
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      # Build with load: true so Trivy can scan it before pushing.
+      # SHA-only tag — no :latest. Deploy job uses the exact SHA.
+      # build-args inject the same values into the Dockerfile ARGs for LABEL.
       - name: Build Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           load: true
           tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_REVISION=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Run Trivy vulnerability scanner
+      # Trivy scans the built image for CRITICAL/HIGH CVEs before it is pushed.
+      # Fail here rather than deploying a vulnerable image.
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -324,12 +344,10 @@ jobs:
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH"
 
-      # Run Push if Trivy scanner passed
+      # Push SHA-tagged image only. No :latest — every deployed image is traceable
+      # to an exact commit. The promote workflow adds semver tags on release.
       - name: Push Docker image
-        run: |
-          docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:latest
-          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          docker push ${{ env.IMAGE_NAME }}:latest
+        run: docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
 
   # ─────────────────────────────────────────────────────────────
   # JOB 4: deploy

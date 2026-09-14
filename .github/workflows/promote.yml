@@ -1,0 +1,61 @@
+name: Promote Image
+
+on:
+  push:
+    tags: ['v*']
+
+# Default: deny everything. Job grants only what it needs.
+permissions: {}
+
+jobs:
+  # -------------------------------------------------------------
+  # JOB: promote
+  # Triggered on v* tag push (e.g. v1.0.0).
+  # Pulls the SHA-tagged image that was built + tested on the
+  # original commit push, re-tags it with the semver version, and
+  # pushes it. No rebuild — same digest proves no changes slipped in.
+  # -------------------------------------------------------------
+  promote:
+    name: Promote SHA ? Semver
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Set lowercase image name
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pull the SHA-tagged image that was built and tested on the original
+      # push. Re-tag with the semver tag. Same digest — no rebuild.
+      - name: Pull SHA image and re-tag with semver
+        run: |
+          docker pull ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker tag  ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+          docker push ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+
+      # Confirm the promoted tag points to the exact same digest as the SHA tag.
+      # A mismatch means something went wrong — fail fast.
+      - name: Verify same digest
+        run: |
+          SHA_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.IMAGE_NAME }}:${{ github.sha }} | cut -d@ -f2)
+          VER_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }} | cut -d@ -f2)
+          echo "SHA digest:     $SHA_DIGEST"
+          echo "Version digest: $VER_DIGEST"
+          if [ "$SHA_DIGEST" != "$VER_DIGEST" ]; then
+            echo "ERROR: Digests do not match — promotion failed!"
+            exit 1
+          fi
+          echo "? Digests match — promotion verified"

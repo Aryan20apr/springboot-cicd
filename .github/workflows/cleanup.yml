@@ -1,0 +1,32 @@
+name: GHCR Cleanup
+
+on:
+  schedule:
+    - cron: '30 2 * * MON'   # Every Monday at 2:30 AM UTC
+  workflow_dispatch:          # Allow manual trigger
+
+# Default: deny everything. Job grants only what it needs.
+permissions: {}
+
+jobs:
+  # -------------------------------------------------------------
+  # JOB: cleanup
+  # Runs weekly to delete untagged GHCR images older than 30 days.
+  # Keeps the 5 most recent untagged images as a safety buffer.
+  # Handles multi-arch manifests safely (dataaxiom/ghcr-cleanup-action).
+  # -------------------------------------------------------------
+  cleanup:
+    name: Delete Untagged Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      packages: write
+
+    steps:
+      - name: Clean up untagged GHCR images
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          dry-run: false
+          keep-n-untagged: 5
+          older-than: 30 days
+          token: ${{ secrets.GITHUB_TOKEN }}

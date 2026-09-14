@@ -24,3 +24,6 @@ management:
   endpoint:
     health:
       show-details: never
+  info:
+    git:
+      mode: full

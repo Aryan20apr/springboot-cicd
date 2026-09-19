@@ -1,0 +1,79 @@
+services:
+  postgres-staging:
+    image: postgres:16-alpine
+    container_name: staging-postgres-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-cicddb}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-staging-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-cicddb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - staging-net
+
+  app-1-staging:
+    image: ghcr.io/aryan20apr/springboot-cicd:${IMAGE_TAG:-latest}
+    container_name: staging-app-1
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-staging:5432/${DB_NAME:-cicddb}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      postgres-staging:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    networks:
+      - staging-net
+
+  app-2-staging:
+    image: ghcr.io/aryan20apr/springboot-cicd:${IMAGE_TAG:-latest}
+    container_name: staging-app-2
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-staging:5432/${DB_NAME:-cicddb}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      postgres-staging:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    networks:
+      - staging-net
+
+  nginx-staging:
+    image: nginx:alpine
+    container_name: staging-nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    volumes:
+      - ./nginx-staging.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - staging-net
+
+volumes:
+  postgres-staging-data:
+
+networks:
+  staging-net:
+    driver: bridge

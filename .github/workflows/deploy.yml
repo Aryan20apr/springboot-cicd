@@ -374,18 +374,151 @@ jobs:
         run: docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
 
   # ─────────────────────────────────────────────────────────────
-  # JOB 4: deploy
-  # Unchanged from baseline — rolling deployment to VM over Tailscale.
-  # concurrency group prevents two deploys running simultaneously on the VM.
-  # cancel-in-progress: false — never cancel a deploy mid-execution.
+  # JOB 5: deploy-staging
+  # Deploys the SHA-tagged image to the staging stack on the VM.
+  # Staging runs on port 8081 with its own isolated Postgres volume.
+  # Uses GitHub Environment 'staging' (no approval gate — auto-deploys).
+  # concurrency group prevents two staging deploys racing on the VM.
   # ─────────────────────────────────────────────────────────────
-  deploy:
-    name: Deploy
+  deploy-staging:
+    name: Deploy — Staging
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
     needs: docker-push
+    environment: staging
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Verify connectivity
+        run: tailscale ping --until-direct=false ${{ secrets.VM_HOSTNAME }}
+
+      - name: Configure database secrets on staging VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VM_HOSTNAME }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            mkdir -p /opt/springboot-app/staging
+            cat << 'EOF' > /opt/springboot-app/staging/.env
+            DB_NAME=${{ secrets.DB_NAME || 'cicddb' }}
+            DB_USER=${{ secrets.DB_USER || 'postgres' }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            EOF
+            chmod 600 /opt/springboot-app/staging/.env
+
+      - name: Copy staging infra files to VM
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key \
+            docker-compose.staging.yaml \
+            nginx-staging.conf \
+            deploy-staging.sh \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_HOSTNAME }}:/opt/springboot-app/staging/
+
+      - name: Execute Staging Rolling Deployment
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VM_HOSTNAME }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd /opt/springboot-app/staging
+            chmod +x deploy-staging.sh
+            ./deploy-staging.sh ${{ github.sha }}
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 6: smoke-tests
+  # Runs declarative HTTP tests (hurl) against the live staging stack.
+  # Tests: health check, CRUD round-trip, deployed SHA verification.
+  # Must pass before deploy-production is even considered.
+  # Results are published as JUnit check annotations.
+  # ─────────────────────────────────────────────────────────────
+  smoke-tests:
+    name: Smoke Tests — Staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: write
+    needs: deploy-staging
+    environment: staging
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      # Install hurl — single static binary, no system dependencies.
+      # Pinned to a specific version for reproducibility.
+      - name: Install hurl
+        run: |
+          HURL_VERSION="6.1.0"
+          curl -sL "https://github.com/Orange-OpenSource/hurl/releases/download/${HURL_VERSION}/hurl-${HURL_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar -xz --strip-components=1 -C /usr/local/bin "hurl-${HURL_VERSION}-x86_64-unknown-linux-gnu/hurl"
+          hurl --version
+
+      # Run all .hurl files in smoke-tests/ as a test suite.
+      # --variable injects values referenced as {{staging_host}} and {{expected_sha}} in the files.
+      # --report-junit produces JUnit XML consumed by the test reporter below.
+      # --test mode: runs all files, reports pass/fail summary, exits non-zero on any failure.
+      - name: Run hurl smoke tests
+        run: |
+          hurl --test \
+            --variable staging_host=${{ secrets.VM_HOSTNAME }} \
+            --variable expected_sha=${{ github.sha }} \
+            --report-junit hurl-results.xml \
+            smoke-tests/*.hurl
+
+      - name: Publish smoke test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Smoke Test Results (Staging)
+          path: hurl-results.xml
+          reporter: java-junit
+          fail-on-error: true
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 7: deploy-production
+  # Deploys the same SHA-tagged image to the production stack.
+  # Production runs on port 80 with its own isolated Postgres volume.
+  # Uses GitHub Environment 'production' — requires manual approval
+  # before this job runs. The pipeline pauses here showing
+  # "Waiting for review" until an approver clicks Approve & Deploy.
+  # concurrency group prevents two production deploys racing on the VM.
+  # ─────────────────────────────────────────────────────────────
+  deploy-production:
+    name: Deploy — Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    needs: smoke-tests
+    environment: production
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     concurrency:
       group: deploy-production
@@ -405,36 +538,39 @@ jobs:
       - name: Verify connectivity
         run: tailscale ping --until-direct=false ${{ secrets.VM_HOSTNAME }}
 
-      - name: Configure database secrets on VM
+      - name: Configure database secrets on production VM
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VM_HOSTNAME }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            mkdir -p /opt/springboot-app
-            cat << 'EOF' > /opt/springboot-app/.env
+            mkdir -p /opt/springboot-app/production
+            cat << 'EOF' > /opt/springboot-app/production/.env
             DB_NAME=${{ secrets.DB_NAME || 'cicddb' }}
             DB_USER=${{ secrets.DB_USER || 'postgres' }}
             DB_PASSWORD=${{ secrets.DB_PASSWORD }}
             EOF
-            chmod 600 /opt/springboot-app/.env
+            chmod 600 /opt/springboot-app/production/.env
 
-      - name: Copy infra files to VM
+      - name: Copy production infra files to VM
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key ${{ secrets.VM_USER }}@${{ secrets.VM_HOSTNAME }} "mkdir -p /opt/springboot-app"
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key docker-compose.yaml nginx.conf deploy-rolling.sh ${{ secrets.VM_USER }}@${{ secrets.VM_HOSTNAME }}:/opt/springboot-app/
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key \
+            docker-compose.production.yaml \
+            nginx.conf \
+            deploy-production.sh \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_HOSTNAME }}:/opt/springboot-app/production/
 
-      - name: Execute Rolling Deployment
+      - name: Execute Production Rolling Deployment
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VM_HOSTNAME }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            cd /opt/springboot-app
-            chmod +x deploy-rolling.sh
-            ./deploy-rolling.sh ${{ github.sha }}
+            cd /opt/springboot-app/production
+            chmod +x deploy-production.sh
+            ./deploy-production.sh ${{ github.sha }}

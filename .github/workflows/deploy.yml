@@ -457,7 +457,6 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      checks: write
     needs: deploy-staging
     environment: staging
 
@@ -484,24 +483,14 @@ jobs:
 
       # Run all .hurl files in smoke-tests/ as a test suite.
       # --variable injects values referenced as {{staging_host}} and {{expected_sha}} in the files.
-      # --report-junit produces JUnit XML consumed by the test reporter below.
       # --test mode: runs all files, reports pass/fail summary, exits non-zero on any failure.
+      # hurl's own exit code (non-zero on failure) is sufficient to gate deploy-production.
       - name: Run hurl smoke tests
         run: |
           hurl --test \
             --variable staging_host=${{ secrets.VM_HOSTNAME }} \
             --variable expected_sha=${{ github.sha }} \
-            --report-junit hurl-results.xml \
             smoke-tests/*.hurl
-
-      - name: Publish smoke test results
-        uses: dorny/test-reporter@v1
-        if: always()
-        with:
-          name: Smoke Test Results (Staging)
-          path: hurl-results.xml
-          reporter: java-junit
-          fail-on-error: true
 
   # ─────────────────────────────────────────────────────────────
   # JOB 7: deploy-production

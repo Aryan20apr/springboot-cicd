@@ -472,13 +472,14 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
 
-      # Install hurl — single static binary, no system dependencies.
+      # Install hurl via .deb — the recommended method on Ubuntu runners.
       # Pinned to a specific version for reproducibility.
       - name: Install hurl
         run: |
           HURL_VERSION="6.1.0"
-          curl -sL "https://github.com/Orange-OpenSource/hurl/releases/download/${HURL_VERSION}/hurl-${HURL_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
-            | tar -xz --strip-components=1 -C /usr/local/bin "hurl-${HURL_VERSION}-x86_64-unknown-linux-gnu/hurl"
+          curl -sLO "https://github.com/Orange-OpenSource/hurl/releases/download/${HURL_VERSION}/hurl_${HURL_VERSION}_amd64.deb"
+          sudo dpkg -i "hurl_${HURL_VERSION}_amd64.deb"
+          rm "hurl_${HURL_VERSION}_amd64.deb"
           hurl --version
 
       # Run all .hurl files in smoke-tests/ as a test suite.
